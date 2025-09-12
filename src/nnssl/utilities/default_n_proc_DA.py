@@ -37,6 +37,8 @@ def get_allowed_n_proc_DA():
             use_this = 28
         elif hostname.startswith('hdf19-gpu') or hostname.startswith('e071-gpu'):
             use_this = 12
+        elif hostname == 'node4V100':
+            use_this = 4
         else:
             use_this = 20  # default value
 
