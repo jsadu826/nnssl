@@ -114,7 +114,7 @@ def _create_pretrain_json(openmind_root_dir: Path):
         dataset.dataset_info["image_quality_score"] = dicts
 
     pretrain_json = collection.to_dict(relative_paths=True)
-    pretrain_json_path = Path(nnssl_raw, "Dataset745_OpenMind", "pretrain_data.json")
+    pretrain_json_path = Path(nnssl_raw, "Dataset001_OpenMind", "pretrain_data.json")
     pretrain_json_path.parent.mkdir(parents=True, exist_ok=True)
     save_json(pretrain_json, pretrain_json_path, indent=4, sort_keys=True)
     print(f"Successfully saved the OpenMind pretrain_data.json at {pretrain_json_path}")
