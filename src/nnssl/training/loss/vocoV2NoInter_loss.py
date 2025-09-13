@@ -25,16 +25,15 @@ class VoCoV2NoInterLoss(nn.Module):
         )
         logits = F.relu(pred_similarity)
 
-        #    This would have been the code if it wasn't wrongly descibed in the paper...
-        #       sim_dist = torch.abs(gt_overlaps - logits)
-        #       N = sim_dist.shape[-1] * sim_dist.shape[-2]
-        #       ce_loss = - torch.sum(torch.log(1 - sim_dist), dim=(1, 2)) / N
+        # This would have been the code if it wasn't wrongly descibed in the paper...
+        # sim_dist = torch.abs(gt_overlaps - logits)
+        # N = sim_dist.shape[-1] * sim_dist.shape[-2]
+        # l_pred = - torch.sum(torch.log(1 - sim_dist), dim=(1, 2)) / N
         pos_dist = torch.abs(gt_overlaps - logits)
-        pos_pos = torch.where(gt_overlaps > 0, torch.ones_like(gt_overlaps), torch.zeros_like(gt_overlaps))
+        neg_pos = torch.where(gt_overlaps == 0, torch.ones_like(gt_overlaps), torch.zeros_like(gt_overlaps))
         pos_loss = ((-torch.log(1 - pos_dist + 1e-6)) * gt_overlaps).sum() / (gt_overlaps.sum() + 1e-6)
-        neg_loss = ((-torch.log(1 - logits + 1e-6)) * (1 - pos_pos)).sum() / ((1 - pos_pos).sum() + 1e-6)
+        neg_loss = ((-torch.log(1 - logits + 1e-6)) * neg_pos).sum() / (neg_pos.sum() + 1e-6)
 
-        # Aggregate per crop then average across batch samples.
         l_pred = pos_loss + neg_loss
         return l_pred
 
@@ -50,7 +49,6 @@ class VoCoV2NoInterLoss(nn.Module):
             inter_crop_sim_relu.shape[-2], inter_crop_sim_relu.shape[-1], device=inter_crop_sim_relu.device
         ).triu(diagonal=1)[None, ...]
 
-        #
         upper_triangular = up_tri * inter_crop_sim_relu
         N = upper_triangular.shape[-1]
         # Aggregate per image cluster then average across batch samples.
