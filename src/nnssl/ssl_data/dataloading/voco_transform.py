@@ -91,12 +91,13 @@ class VocoTransform(AbstractTransform):
     def get_base_crops(self, data):
         """
         Splits the data into base crops.
-        Returns all crops.
+        Returns all crops and their top left xy.
 
         :param data: [B, C, X, Y, Z] data to split into base crops.
-        :return: [B, N_subcrops, C, X_subcrop, Y_subcrop, Z_subcrop] base crops
+        :return: [B, N_subcrops, C, X_subcrop, Y_subcrop, Z_subcrop] base crops, [B, N_subcrops, 2] top_left_xy
         """
         base_crops = []
+        top_left_xy = []
         for i in range(self.voco_base_crop_count[0]):
             for j in range(self.voco_base_crop_count[1]):
                 for k in range(self.voco_base_crop_count[2]):
@@ -108,24 +109,25 @@ class VocoTransform(AbstractTransform):
                         k * self.voco_crop_size[2] : (k + 1) * self.voco_crop_size[2],
                     ]
                     base_crops.append(crop)
-        return np.stack(base_crops, axis=1)
+                    top_left_xy.append([i * self.voco_crop_size[0], j * self.voco_crop_size[1]])
+        return np.stack(base_crops, axis=1), np.array([top_left_xy] * data.shape[0])
 
-
-    def get_target_crops(self, data: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def get_target_crops(self, data: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
-        Defines a random crop that is partially overlapping with some of the base crops.
-        :return: [B, N_subcrops, C, X_subcrop, Y_subcrop, Z_subcrop], overlaps [N_target_crop, N_base_crop]
+        Defines a random crop that is partially overlapping with some of the base crops and its top left xy.
+        :return: [B, N_subcrops, C, X_subcrop, Y_subcrop, Z_subcrop], overlaps [N_target_crop, N_base_crop], top_left_xy [B, N_subcrops, 2]
         """
 
         image_wise_crop = []
         image_wise_overlaps = []
+        image_wise_top_left_xy = []
 
         crop_size = self.voco_crop_size
         total_volume = crop_size[0] * crop_size[1] * crop_size[2]
 
         # For each image in batch -- data shape: [B, C, X, Y, Z]
         for big_crop in data:
-            target_crops, target_overlaps = [], []
+            target_crops, target_overlaps, target_top_left_xy = [], [], []
             for _ in range(self.voco_target_crop_count):
                 x_offset = np.random.randint(0, (big_crop.shape[1] - crop_size[0]) + 1)
                 y_offset = np.random.randint(0, (big_crop.shape[2] - crop_size[1]) + 1)
@@ -138,6 +140,7 @@ class VocoTransform(AbstractTransform):
                     z_offset : z_offset + crop_size[2],
                 ]
                 target_crops.append(crop)
+                target_top_left_xy.append([x_offset, y_offset])
 
                 # Calculate overlap with base crops
                 target_base_crop_overlaps = []
@@ -151,18 +154,22 @@ class VocoTransform(AbstractTransform):
                 target_overlaps.append(np.array(target_base_crop_overlaps))
             image_wise_crop.append(np.stack(target_crops, axis=0))
             image_wise_overlaps.append(np.stack(target_overlaps, axis=0))  # [N_target_subcrops, N_base_subcrops]
+            image_wise_top_left_xy.append(target_top_left_xy)
 
-        return np.stack(image_wise_crop, axis=0), np.stack(image_wise_overlaps, axis=0)
+        return np.stack(image_wise_crop, axis=0), np.stack(image_wise_overlaps, axis=0), np.array(image_wise_top_left_xy)
 
     def __call__(self, **data_dict):
         data = data_dict.get(self.data_key)
         if data is None:
             raise ValueError(f"No data found for key {self.data_key}")
 
-        base_crops = self.get_base_crops(data)  # [B, N_base_subcrops, C, X_subcrop, Y_subcrop, Z_subcrop]
-        target_crops, gt_overlap = self.get_target_crops(data)
+        base_crops, base_top_left_xy = self.get_base_crops(data)
+        target_crops, gt_overlap, target_top_left_xy = self.get_target_crops(data)
+        # base_crops: [B, N_base_subcrops, C, X_subcrop, Y_subcrop, Z_subcrop]
+        # base_top_left_xy: [B, N_base_subcrops, 2]
         # target_crops: [B, N_target_subcrops, C, X_subcrop, Y_subcrop, Z_subcrop]
         # gt_overlap: [B, N_target_subcrops, N_base_subcrops]
+        # target_top_left_xy: [B, N_target_subcrops, 2]
         B = base_crops.shape[0]
         if self.aug == "train":
             base_crops = rearrange(base_crops, "b n c x y z  -> (b n) c x y z")
@@ -176,10 +183,10 @@ class VocoTransform(AbstractTransform):
         target_crops_flat = rearrange(target_crops, "b n c x y z -> (b n) c x y z")
         joint_crops_flat = np.concatenate([base_crops_flat, target_crops_flat], axis=0)
         base_crop_index = base_crops_flat.shape[0]
+        all_crops_top_left_xy = np.concatenate([base_top_left_xy, target_top_left_xy], axis=1)
 
         data_dict["all_crops"] = joint_crops_flat
         data_dict["base_crop_index"] = base_crop_index
-        # data_dict["base_crops"] = base_crops
-        # data_dict["target_crops"] = target_crops
         data_dict["base_target_crop_overlaps"] = gt_overlap
+        data_dict["all_crops_top_left_xy"] = all_crops_top_left_xy # [B, N_base_subcrops + N_target_subcrops, 2]
         return data_dict
