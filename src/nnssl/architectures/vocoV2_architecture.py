@@ -2,13 +2,13 @@ import torch
 from nnssl.architectures.voco_architecture import VocoProjectionHead
 from torch import nn
 
-class VoCoV2NoInterArchitecture(nn.Module):
+
+class VoCoV2Architecture(nn.Module):
     def __init__(self, encoder: nn.Module,  features: list[int]):
-        super(VoCoV2NoInterArchitecture, self).__init__()
+        super(VoCoV2Architecture, self).__init__()
         self.encoder = encoder
         self.adaptive_pool = nn.AdaptiveAvgPool3d((1, 1, 1))
         self.dropout = nn.Dropout1d(p=0.2, inplace=False)
-
 
         total_features = sum(features)
         self.projector_tea = VocoProjectionHead(total_features, 2048, 2048, norm_op=nn.InstanceNorm1d)
@@ -32,13 +32,14 @@ class VoCoV2NoInterArchitecture(nn.Module):
         x_stu = self.projector_stu(self.dropout(flat_out))
         return x_tea, x_stu
 
-class VoCoV2NoInterEvaArchitecture(nn.Module):
+
+class VoCoV2EvaArchitecture(nn.Module):
     """
     We don't have multiple CNN stages that we can take the features from and concatenate them, so for the transformer
     we only use the features from the (last) output layer.
     """
     def __init__(self, encoder: nn.Module, embed_dim: int):
-        super(VoCoV2NoInterEvaArchitecture, self).__init__()
+        super(VoCoV2EvaArchitecture, self).__init__()
         self.encoder = encoder
         self.adaptive_pool = nn.AdaptiveAvgPool3d((1, 1, 1))
         self.dropout = nn.Dropout1d(0.2, inplace=False)
