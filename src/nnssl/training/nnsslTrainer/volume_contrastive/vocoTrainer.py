@@ -137,7 +137,7 @@ class VoCoTrainer(AbstractBaseTrainer):
         )
         # From here on out we are working with base crops and target crops!
 
-        tr_transforms.append(NumpyToTensor(["all_crops", "base_target_crop_overlaps"], "float"))
+        tr_transforms.append(NumpyToTensor(["all_crops", "base_target_crop_overlaps", "all_crops_top_left_xy"], "float"))
         tr_transforms = Compose(tr_transforms)
         return tr_transforms
 
@@ -155,7 +155,7 @@ class VoCoTrainer(AbstractBaseTrainer):
             )
         )
 
-        val_transforms.append(NumpyToTensor(["all_crops", "base_target_crop_overlaps"], "float"))
+        val_transforms.append(NumpyToTensor(["all_crops", "base_target_crop_overlaps", "all_crops_top_left_xy"], "float"))
         val_transforms = Compose(val_transforms)
         return val_transforms
 
