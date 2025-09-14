@@ -823,11 +823,9 @@ class AbstractBaseTrainer(ABC):
             self.save_checkpoint(join(self.output_folder, "checkpoint_best.pth"))
 
         if self.local_rank == 0:
-            # if self.current_epoch % 50 == 0:
-            #     self.print_to_log_file("Saving checkpoint...")
-            #     self.save_checkpoint(
-            #         join(self.output_folder, f"checkpoint_epoch_{self.current_epoch}.pth"), live_upload=True
-            #     )
+            if (self.current_epoch + 1) % self.save_every == 0:
+                self.print_to_log_file("Saving checkpoint...")
+                self.save_checkpoint(join(self.output_folder, f"checkpoint_epoch_{self.current_epoch}.pth"))
             self.logger.plot_progress_png(self.output_folder)
 
         self.current_epoch += 1
