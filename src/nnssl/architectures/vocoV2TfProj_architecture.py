@@ -46,7 +46,7 @@ class TransformerProjectionHead(nn.Module):
         coords_2d: [B, N, 2]
         """
         x = self.in_proj(x)
-        pe = self.pe_2dsincos(coords_2d, self.hidden_dim)
+        pe = self.pe_sincos_2d(coords_2d, self.hidden_dim)
         x = x + pe
         x = self.transformer(x)
         x = self.out_proj(x)

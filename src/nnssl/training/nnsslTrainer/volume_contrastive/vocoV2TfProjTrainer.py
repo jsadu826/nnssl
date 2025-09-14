@@ -73,7 +73,7 @@ class VoCoV2TfProjTrainer(VoCoV2Trainer):
         all_crops_top_left_xy = all_crops_top_left_xy.to(self.device, non_blocking=True)
         span_x = self.voco_crop_size[0] * (self.voco_base_crop_count[0] - 1)
         span_y = self.voco_crop_size[1] * (self.voco_base_crop_count[1] - 1)
-        all_crops_top_left_xy /= torch.tensor([span_x, span_y], device=self.device) # normalize to the range [0, 1]
+        all_crops_top_left_xy /= torch.tensor([span_x, span_y], dtype=torch.float, device=self.device) # normalize to the range [0, 1]
 
         self.optimizer.zero_grad(set_to_none=True)
         # Autocast is a little bitch.
@@ -115,7 +115,7 @@ class VoCoV2TfProjTrainer(VoCoV2Trainer):
         all_crops_top_left_xy = all_crops_top_left_xy.to(self.device, non_blocking=True)
         span_x = self.voco_crop_size[0] * (self.voco_base_crop_count[0] - 1)
         span_y = self.voco_crop_size[1] * (self.voco_base_crop_count[1] - 1)
-        all_crops_top_left_xy /= torch.tensor([span_x, span_y], device=self.device) # normalize to the range [0, 1]
+        all_crops_top_left_xy /= torch.tensor([span_x, span_y], dtype=torch.float, device=self.device) # normalize to the range [0, 1]
 
         # Autocast is a little bitch.
         # If the device_type is 'cpu' then it's slow as heck and needs to be disabled.
