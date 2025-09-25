@@ -1,3 +1,4 @@
+from copy import deepcopy
 from typing import Tuple
 
 import numpy as np
@@ -53,7 +54,7 @@ class PatchMixTransform(AbstractTransform):
         if data is None:
             raise ValueError(f"No data found for key {self.data_key}")
 
-        orig_images = data_dict[self.data_key]
+        orig_images = deepcopy(data_dict[self.data_key])
 
         # ==========================================================
         # ==========================================================
