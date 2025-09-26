@@ -15,6 +15,7 @@ from einops import rearrange
 import numpy as np
 from loguru import logger
 import torch
+from copy import deepcopy
 
 
 class VocoTransform(AbstractTransform):
@@ -162,6 +163,7 @@ class VocoTransform(AbstractTransform):
         data = data_dict.get(self.data_key)
         if data is None:
             raise ValueError(f"No data found for key {self.data_key}")
+        data = deepcopy(data) # Do not mess up the input data
 
         base_crops, base_top_left_xy = self.get_base_crops(data)
         target_crops, gt_overlap, target_top_left_xy = self.get_target_crops(data)
