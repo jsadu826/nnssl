@@ -45,31 +45,34 @@ class PatchMixTransform(AbstractTransform):
         self.mix_across_gpus = mix_across_gpus
         self.mix_prob = mix_prob
         self.data_key = data_key
-        self.distributed = torch.distributed.is_initialized() and torch.distributed.get_world_size() > 1
-        self.world_size = torch.distributed.get_world_size() if self.distributed else 1
-        self.rank = torch.distributed.get_rank() if self.distributed else 0
 
     def __call__(self, **data_dict):
         data = data_dict.get(self.data_key)
         if data is None:
             raise ValueError(f"No data found for key {self.data_key}")
+        orig_images = deepcopy(data) # Do not mess up the input data
 
-        orig_images = deepcopy(data_dict[self.data_key])
+        # ==========================================================
+        # ==========================================================
+        # ==========================================================
+        # ==========================================================
+        # NOTE - Distributed state is checked dynamically in __call__ method, not in the __init__ method,
+        # because sometimes although the class object is initialized in the main process,
+        # it is called in background worker processes where distributed is not initialized.
+        DISTRIBUTED = torch.distributed.is_available() and torch.distributed.is_initialized() and torch.distributed.get_world_size() > 1
+        WORLD_SIZE = torch.distributed.get_world_size() if DISTRIBUTED else 1
+        RANK = torch.distributed.get_rank() if DISTRIBUTED else 0
 
-        # ==========================================================
-        # ==========================================================
-        # ==========================================================
-        # ==========================================================
         if isinstance(orig_images, ndarray):
             orig_images = torch.from_numpy(orig_images)
 
         b = orig_images.shape[0]
-        b_total = b * self.world_size
+        b_total = b * WORLD_SIZE
 
         shall_mix = self.num_patch_groups > 1 and np.random.rand() < self.mix_prob
 
         # Synchronize PatchMix decision across GPUs
-        if self.distributed and not self.mix_across_gpus:
+        if DISTRIBUTED and not self.mix_across_gpus:
             broadcasted_shall_mix = torch.tensor(int(shall_mix)).cuda()
             torch.distributed.broadcast(broadcasted_shall_mix, src=0)
             shall_mix = bool(broadcasted_shall_mix.cpu().item())
@@ -80,8 +83,8 @@ class PatchMixTransform(AbstractTransform):
         # ==========================================================
         if shall_mix:
             # Gather images from all GPUs
-            if self.distributed and self.mix_across_gpus:
-                gathered_orig_images = [torch.zeros_like(orig_images).cuda() for _ in range(self.world_size)]
+            if DISTRIBUTED and self.mix_across_gpus:
+                gathered_orig_images = [torch.zeros_like(orig_images).cuda() for _ in range(WORLD_SIZE)]
                 torch.distributed.all_gather(gathered_orig_images, orig_images.cuda())
                 orig_images = torch.cat(gathered_orig_images, dim=0).cpu()
                 del gathered_orig_images
@@ -136,8 +139,8 @@ class PatchMixTransform(AbstractTransform):
             o2m_indices = (base_indices - torch.arange(start=0, end=self.num_patch_groups)) % B  # [B, num_patch_groups]
             m2m_indices = (base_indices + torch.arange(start=-self.num_patch_groups + 1, end=self.num_patch_groups) + B) % B  # [B, 2 * num_patch_groups - 1]
 
-            if self.distributed and not self.mix_across_gpus:
-                offset = b * self.rank
+            if DISTRIBUTED and not self.mix_across_gpus:
+                offset = b * RANK
                 m2o_indices += offset
                 o2m_indices += offset
                 m2m_indices += offset
@@ -147,17 +150,17 @@ class PatchMixTransform(AbstractTransform):
             m2m_simi_labels = torch.full((B, b_total), 0.0).scatter_(1, m2m_indices, (1.0 - torch.abs(self.num_patch_groups - torch.arange(2 * self.num_patch_groups - 1) - 1) / self.num_patch_groups).expand(B, -1))  # [B, b_total]
 
             # ============ Step 5: Re-distribute to each GPU if needed
-            if self.distributed and self.mix_across_gpus:
+            if DISTRIBUTED and self.mix_across_gpus:
                 mixed_images = mixed_images.cuda()
                 torch.distributed.broadcast(mixed_images, src=0)
                 mixed_images = mixed_images.cpu()
-                mixed_images = mixed_images[b * self.rank : b * (self.rank + 1)]
+                mixed_images = mixed_images[b * RANK : b * (RANK + 1)]
 
                 for labels in [m2o_simi_labels, o2m_simi_labels, m2m_simi_labels]:
                     labels = labels.cuda()
                     torch.distributed.broadcast(labels, src=0)
                     labels = labels.cpu()
-                    labels = labels[b * self.rank : b * (self.rank + 1)]
+                    labels = labels[b * RANK : b * (RANK + 1)]
         # ==========================================================
         #                         Don't mix!
         # ==========================================================
@@ -173,11 +176,12 @@ class PatchMixTransform(AbstractTransform):
         # ==========================================================
         # ==========================================================
 
-        data_dict["mixed_images"] = mixed_images.float()  # [b, c, x, y, z]
-        data_dict["m2o_simi_labels"] = m2o_simi_labels.float()  # [b, b_total]
-        data_dict["o2m_simi_labels"] = o2m_simi_labels.float()  # [b, b_total]
-        data_dict["m2m_simi_labels"] = m2m_simi_labels.float()  # [b, b_total]
-        data_dict["forward_indices"] = forward_indices.float()  # [num_patches]
-        data_dict["backward_indices"] = backward_indices.float()  # [num_patches]
+        # TODO - Currently all converted to np arrays to align with the nnssl style
+        data_dict["mixed_images"] = mixed_images.numpy()  # [b, c, x, y, z]
+        data_dict["m2o_simi_labels"] = m2o_simi_labels.numpy()  # [b, b_total]
+        data_dict["o2m_simi_labels"] = o2m_simi_labels.numpy()  # [b, b_total]
+        data_dict["m2m_simi_labels"] = m2m_simi_labels.numpy()  # [b, b_total]
+        data_dict["forward_indices"] = forward_indices.numpy()  # [num_patches]
+        data_dict["backward_indices"] = backward_indices.numpy()  # [num_patches]
 
         return data_dict
